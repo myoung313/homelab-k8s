@@ -1,0 +1,7 @@
+*.log
+*.tmp
+*.swp
+.env
+*.key
+*.pem
+kubeconfig

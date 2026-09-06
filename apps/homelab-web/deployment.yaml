@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homelab-web
+  labels:
+    app: homelab-web
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: homelab-web
+  template:
+    metadata:
+      labels:
+        app: homelab-web
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
