@@ -18,7 +18,7 @@ You need cleanup, one urgent fix, more RAM, and better resilience. You don't nee
 
 | ID | Name | Host | State | Decision |
 |---|---|---|---|---|
-| 101 | `k3s-cp01` (VM) | pve01 | running, **disk 89.1%** | **Fix now** (below). Move its disk to `nvme-lvm`, grow it, give it 4 vCPU / 8 GB. It becomes the **data** node (Postgres, Redis, console). |
+| 101 | `k3s-cp01` (VM) | pve01 | running, 39% used (`df`) | Move its disk to `nvme-lvm`, grow it, give it 4 vCPU / 8 GB. It becomes the **data** node (Postgres, Redis, console). |
 | 102 | `k3s-worker01` (VM) | pve02 | running, disk 44.2% | **Grow**: 6-8 vCPU / 12-16 GB. pve02 has 12 threads and is only ~20% used on memory, so it becomes the **compute** node (agent workers, n8n, optional Ollama). |
 | 106 | `wazuh-mgr01` (LXC) | pve01 | running, disk 60.8% | **Keep.** Enroll both K3s VMs as Wazuh agents, set index retention (30 days) so the disk doesn't fill, and forward alerts to `security-auditor` through n8n. |
 | 100 | `jellyfin` (LXC) | pve01 | running, light | **Keep** (personal). If pve01 RAM gets tight, it's the first thing to move to pve02. |
@@ -35,7 +35,12 @@ vzdump 101 106 --storage local --mode snapshot --compress zstd   # on pve01
 vzdump 102 --storage local --mode snapshot --compress zstd       # on pve02
 ```
 
-## Step 1 (urgent): free and grow `k3s-cp01`'s disk
+## Step 1: free and grow `k3s-cp01`'s disk
+
+> **Measured after the resize:** `df -h /` inside cp01 shows 29G with 11G used (**39%**), so there's
+> no disk pressure. The Proxmox column was not showing the guest's real usage. This step is now an
+> optional upgrade: move the disk to `nvme-lvm` for faster Postgres. Run the `df` check again if it
+> ever passes 80%.
 
 At about 89% used, the node is already past the kubelet's default image garbage-collection threshold
 (85%) and close to its disk-pressure eviction thresholds. Pods will start getting evicted, and image
