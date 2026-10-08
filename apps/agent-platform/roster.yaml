@@ -274,7 +274,7 @@ agents:
 
   - id: freelance-bidder
     dept: sales
-    phase: 2
+    phase: 1
     model: sonnet
     effort: medium
     budget_usd: 0.60

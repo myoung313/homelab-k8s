@@ -52,6 +52,7 @@ research, lead generation, outreach drafts, proposals, delivery, content, and fi
 Agents unlock in phases, run under per-agent and global budgets, and can't touch the
 outside world without a human approval, which n8n then executes.
 
+- 60-day sprint (start here): [docs/ai-agents/60-DAY-SPRINT.md](docs/ai-agents/60-DAY-SPRINT.md)
 - Plan, team, costs, roadmap: [docs/ai-agents/BLUEPRINT.md](docs/ai-agents/BLUEPRINT.md)
 - Hardware reuse plan: [docs/ai-agents/PROXMOX-PLAN.md](docs/ai-agents/PROXMOX-PLAN.md)
 - Deployment runbook: [docs/ai-agents/DEPLOY.md](docs/ai-agents/DEPLOY.md)

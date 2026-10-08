@@ -5,6 +5,8 @@ approving, selling, and steering, with a clear path to **$10k/month**.
 
 This document covers the business plan, the team, the architecture, the costs, and the roadmap.
 For the hardware, see [PROXMOX-PLAN.md](PROXMOX-PLAN.md). To deploy, see [DEPLOY.md](DEPLOY.md).
+**Start with [60-DAY-SPRINT.md](60-DAY-SPRINT.md)**, which covers the first two months: fast cash
+through freelance work and local clients, with deposits upfront.
 
 ---
 
@@ -116,8 +118,8 @@ You are the **CEO**. You approve, sell, and own relationships. The agents do eve
 
 Agents unlock in **phases** so you don't pay for a delivery team before you have a client:
 
-- **Phase 1 (week 1): 14 agents.** Research, pipeline, outreach, proposals, content planning.
-- **Phase 2 (first paying client): +20.** Delivery, client success, finance, ops.
+- **Phase 1 (week 1): 15 agents.** Research, pipeline, outreach, freelance bids, proposals, content planning.
+- **Phase 2 (first paying client): +19.** Delivery, client success, finance, ops.
 - **Phase 3 (month 4+): +6.** Products, SEO, competitive intel, cost tuning.
 
 Change phases with one setting (`AGENTOS_PHASE` in `apps/agent-platform/kustomization.yaml`).
@@ -139,7 +141,7 @@ Change phases with one setting (`AGENTOS_PHASE` in `apps/agent-platform/kustomiz
 | 13 | `inbox-triage` | Sales | 1 | haiku | on demand | Sorts replies, drafts answers, handles unsubscribes |
 | 14 | `discovery-prep` | Sales | 1 | sonnet + web | on demand | One-page brief + ROI estimate before every sales call |
 | 15 | `proposal-writer` | Sales | 1 | opus | on demand | Signable 3-tier proposal from your call notes |
-| 16 | `freelance-bidder` | Sales | 2 | sonnet | on demand | Scores job posts, drafts bids (you submit them by hand) |
+| 16 | `freelance-bidder` | Sales | 1 | sonnet | on demand | Scores job posts, drafts bids (you submit them by hand) |
 | 17 | `solutions-architect` | Delivery | 2 | opus | on demand | Build plan, security, hosting, tests, runbook |
 | 18 | `workflow-builder` | Delivery | 2 | sonnet | on demand | Importable n8n workflows with retries and logging |
 | 19 | `code-builder` | Delivery | 2 | opus | on demand | Custom code with tests (you commit it with Claude Code) |

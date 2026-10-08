@@ -71,20 +71,24 @@ df -h /
 
 ## Step 2: RAM, CPU, and node roles
 
-Find out how much RAM each host has (`free -h` on pve01 and pve02). Most 8th-gen-and-newer OptiPlex
-Micros have two SODIMM slots; check your model's maximum before buying.
+**Measured:** pve02 has **15 GiB** (16 GB tier; 3.1 GiB used, 12 GiB available with Splunk and pfSense
+stopped). pve01 is still to check (`free -h`).
+
+16 GB is enough for phases 1 and 2. The whole agent stack requests under 2 GB, and the AI work runs
+on Anthropic's servers. Upgrade to 32 GB only when you want Ollama or more VMs. Before buying, check
+the slots and the board's maximum with `dmidecode -t memory | grep -Ei "maximum capacity|size:"`.
 
 | Host RAM | pve01 (6 threads) | pve02 (12 threads) |
 |---|---|---|
-| 16 GB each (tight) | cp01 6 GB · wazuh 6 GB · jellyfin 1 GB | worker01 10 GB · Ollama off |
+| **16 GB each (your current pve02)** | cp01 6 GB · wazuh 6 GB · jellyfin 1 GB | worker01 10 GB · Ollama off · ~3 GB host headroom |
 | **32 GB each (recommended)** | cp01 8 GB · wazuh 8 GB · jellyfin 2 GB · ~10 GB spare | worker01 16 GB · ~12 GB spare |
 | 64 GB on pve02 | same as above | worker01 24-32 GB · Ollama on |
 
 Apply the sizes (each VM needs a reboot afterwards, so do one at a time):
 
 ```bash
-qm set 101 --cores 4 --memory 8192     # pve01
-qm set 102 --cores 8 --memory 16384    # pve02
+qm set 101 --cores 4 --memory 6144     # pve01 at 16 GB (8192 if it has 32 GB)
+qm set 102 --cores 8 --memory 10240    # pve02 at 16 GB (use 16384 after a 32 GB upgrade)
 ```
 
 Then tell Kubernetes which node does what. The manifests prefer these labels but still run without them:
