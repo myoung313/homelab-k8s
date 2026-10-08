@@ -1,0 +1,6 @@
+anthropic>=1.0,<2
+croniter>=2.0,<7
+psycopg[binary]>=3.2,<4
+PyYAML>=6.0,<7
+redis>=5.0,<7
+tzdata>=2024.1

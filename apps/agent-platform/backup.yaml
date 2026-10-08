@@ -1,0 +1,67 @@
+# Nightly logical backup of Postgres (agents + n8n), 14 days kept on a local volume.
+# Proxmox vzdump covers the VM; copy this volume offsite (rclone to B2) for real disaster recovery.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backups
+  namespace: agents
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: agents
+spec:
+  schedule: "15 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: agentos
+            component: backup
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            fsGroup: 70
+          containers:
+            - name: pg-dump
+              image: postgres:16-alpine
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef: { name: agentos-secrets, key: POSTGRES_PASSWORD }
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  stamp=$(date +%Y%m%d-%H%M)
+                  pg_dumpall -h postgres -U agentos | gzip > /backups/all-$stamp.sql.gz
+                  find /backups -name 'all-*.sql.gz' -mtime +14 -delete
+                  ls -lh /backups
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { cpu: 500m, memory: 256Mi }
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: postgres-backups

@@ -1,0 +1,128 @@
+# Agents read untrusted web content, so treat every pod in this namespace as
+# potentially manipulated: no inbound except from Traefik, no reach into the home
+# LAN, and egress to the internet only on web/mail ports.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: agents
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: agents
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: data-access
+  namespace: agents
+spec:
+  # Postgres and Redis accept connections only from the runtime and n8n.
+  podSelector:
+    matchLabels:
+      agentos/data: "true"
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: agentos
+        - podSelector:
+            matchLabels:
+              app: n8n
+      ports:
+        - { protocol: TCP, port: 5432 }
+        - { protocol: TCP, port: 6379 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: app-egress
+  namespace: agents
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app, operator: In, values: ["agentos", "n8n", "ollama"] }
+  policyTypes: ["Egress"]
+  egress:
+    # In-namespace services: Postgres, Redis, console API, Ollama.
+    - to:
+        - podSelector:
+            matchLabels:
+              agentos/data: "true"
+      ports:
+        - { protocol: TCP, port: 5432 }
+        - { protocol: TCP, port: 6379 }
+    - to:
+        - podSelector:
+            matchLabels:
+              component: console
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ollama
+      ports:
+        - { protocol: TCP, port: 11434 }
+    # Internet only (Anthropic API, websites, SaaS APIs, SMTP), never private ranges.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "100.64.0.0/10"]
+      ports:
+        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 465 }
+        - { protocol: TCP, port: 587 }
+        - { protocol: TCP, port: 993 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-ingress
+  namespace: agents
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app, operator: In, values: ["agentos", "n8n", "ollama"] }
+  policyTypes: ["Ingress"]
+  ingress:
+    # Traefik serves the console and n8n editor to the LAN.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 5678 }
+    # n8n calls the console API; n8n may call Ollama.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: n8n
+      ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 11434 }

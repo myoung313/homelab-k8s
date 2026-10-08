@@ -1,0 +1,52 @@
+name: agentos image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/agent-platform/runtime/**"
+      - "apps/agent-platform/roster.yaml"
+      - ".github/workflows/agentos-image.yml"
+  pull_request:
+    paths:
+      - "apps/agent-platform/runtime/**"
+      - "apps/agent-platform/roster.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Validate roster
+        working-directory: apps/agent-platform/runtime
+        run: |
+          pip install -r requirements.txt
+          for phase in 1 2 3; do AGENTOS_PHASE=$phase python -m agentos validate ../roster.yaml; done
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: apps/agent-platform/runtime
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/myoung313/homelab-agentos:latest
+            ghcr.io/myoung313/homelab-agentos:${{ github.sha }}

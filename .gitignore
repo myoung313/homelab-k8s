@@ -5,3 +5,7 @@
 *.key
 *.pem
 kubeconfig
+
+# Real secrets never go in Git (see apps/agent-platform/secrets.example.yaml)
+secrets.yaml
+__pycache__/

@@ -1,0 +1,78 @@
+# Optional local models. Scaled to 0 by default: on CPU-only OptiPlex Micros a
+# 3-4B model runs at a few tokens/second, which is fine for embeddings and
+# yes/no classification inside n8n, but not for the agents' main work.
+# Enable when the worker VM has RAM to spare:
+#   kubectl -n agents scale deploy/ollama --replicas=1
+#   kubectl -n agents exec deploy/ollama -- ollama pull nomic-embed-text
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: agents
+spec:
+  selector:
+    app: ollama
+  ports:
+    - port: 11434
+      targetPort: 11434
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  namespace: agents
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 30Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: agents
+  labels:
+    app: ollama
+spec:
+  replicas: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          # pve02 has the most cores; keep inference off the control-plane node.
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: homelab.tazlab/tier
+                    operator: In
+                    values: ["compute"]
+      containers:
+        - name: ollama
+          image: ollama/ollama:0.9.0
+          ports:
+            - containerPort: 11434
+          env:
+            - { name: OLLAMA_KEEP_ALIVE, value: "10m" }
+            - { name: OLLAMA_NUM_PARALLEL, value: "1" }
+          resources:
+            requests: { cpu: "1", memory: 2Gi }
+            limits: { cpu: "4", memory: 6Gi }
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ollama-models
