@@ -71,8 +71,13 @@ df -h /
 
 ## Step 2: RAM, CPU, and node roles
 
-**Measured:** pve02 has **15 GiB** (16 GB tier; 3.1 GiB used, 12 GiB available with Splunk and pfSense
-stopped). pve01 is still to check (`free -h`).
+**Measured:** both hosts have **15 GiB** (16 GB tier).
+- pve01: 6.6 GiB used, 8.8 GiB available (cp01 + Wazuh + Jellyfin running). This is the tighter host.
+- pve02: 3.1 GiB used, 12 GiB available (Splunk and pfSense stopped).
+
+On pve01, check the current allocations before resizing (`qm config 101 | grep memory`,
+`pct config 106 | grep memory`, `pct config 100 | grep memory`). Keep the sum of guest memory at
+13 GB or less, so the host keeps about 2 GB for itself and ZFS/LVM caches.
 
 16 GB is enough for phases 1 and 2. The whole agent stack requests under 2 GB, and the AI work runs
 on Anthropic's servers. Upgrade to 32 GB only when you want Ollama or more VMs. Before buying, check
@@ -80,7 +85,7 @@ the slots and the board's maximum with `dmidecode -t memory | grep -Ei "maximum 
 
 | Host RAM | pve01 (6 threads) | pve02 (12 threads) |
 |---|---|---|
-| **16 GB each (your current pve02)** | cp01 6 GB · wazuh 6 GB · jellyfin 1 GB | worker01 10 GB · Ollama off · ~3 GB host headroom |
+| **16 GB each (your current hosts)** | cp01 6 GB · wazuh 6 GB · jellyfin 1 GB | worker01 10 GB · Ollama off · ~3 GB host headroom |
 | **32 GB each (recommended)** | cp01 8 GB · wazuh 8 GB · jellyfin 2 GB · ~10 GB spare | worker01 16 GB · ~12 GB spare |
 | 64 GB on pve02 | same as above | worker01 24-32 GB · Ollama on |
 
