@@ -1,0 +1,179 @@
+# AgentOS runtime: one image, three roles.
+#   scheduler  fires cron agents (exactly 1 replica)
+#   worker     runs tasks from the queue (throughput = replicas x WORKER_CONCURRENCY)
+#   console    Mission Control web UI + /api/tasks for n8n
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentos-scheduler
+  namespace: agents
+  labels:
+    app: agentos
+    component: scheduler
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: agentos
+      component: scheduler
+  template:
+    metadata:
+      labels:
+        app: agentos
+        component: scheduler
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: scheduler
+          image: ghcr.io/myoung313/homelab-agentos:latest
+          imagePullPolicy: Always
+          args: ["scheduler"]
+          envFrom:
+            - configMapRef: { name: agentos-config }
+            - secretRef: { name: agentos-secrets }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 192Mi }
+          volumeMounts:
+            - name: roster
+              mountPath: /etc/agentos
+              readOnly: true
+      volumes:
+        - name: roster
+          configMap:
+            name: agentos-roster
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentos-worker
+  namespace: agents
+  labels:
+    app: agentos
+    component: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: agentos
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: agentos
+        component: worker
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: homelab.tazlab/tier
+                    operator: In
+                    values: ["compute"]
+      containers:
+        - name: worker
+          image: ghcr.io/myoung313/homelab-agentos:latest
+          imagePullPolicy: Always
+          args: ["worker"]
+          envFrom:
+            - configMapRef: { name: agentos-config }
+            - secretRef: { name: agentos-secrets }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 384Mi }
+          volumeMounts:
+            - name: roster
+              mountPath: /etc/agentos
+              readOnly: true
+      volumes:
+        - name: roster
+          configMap:
+            name: agentos-roster
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentos-console
+  namespace: agents
+spec:
+  selector:
+    app: agentos
+    component: console
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentos-console
+  namespace: agents
+  labels:
+    app: agentos
+    component: console
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agentos
+      component: console
+  template:
+    metadata:
+      labels:
+        app: agentos
+        component: console
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: console
+          image: ghcr.io/myoung313/homelab-agentos:latest
+          imagePullPolicy: Always
+          args: ["console"]
+          envFrom:
+            - configMapRef: { name: agentos-config }
+            - secretRef: { name: agentos-secrets }
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 192Mi }
+          volumeMounts:
+            - name: roster
+              mountPath: /etc/agentos
+              readOnly: true
+      volumes:
+        - name: roster
+          configMap:
+            name: agentos-roster

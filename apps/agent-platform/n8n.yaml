@@ -1,0 +1,93 @@
+# n8n is the visual automation canvas and the "hands" of the system: it executes
+# approved actions (send email, publish, invoice), feeds inbound events to agents
+# via the console API, and runs client-workflow prototypes.
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n
+  namespace: agents
+spec:
+  selector:
+    app: n8n
+  ports:
+    - port: 80
+      targetPort: 5678
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: n8n-data
+  namespace: agents
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+  namespace: agents
+  labels:
+    app: n8n
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: n8n
+  template:
+    metadata:
+      labels:
+        app: n8n
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: n8n
+          # Pinned for reproducibility; bump to the current stable release when you deploy.
+          image: n8nio/n8n:1.94.1
+          ports:
+            - containerPort: 5678
+          env:
+            - { name: DB_TYPE, value: postgresdb }
+            - { name: DB_POSTGRESDB_HOST, value: postgres }
+            - { name: DB_POSTGRESDB_DATABASE, value: n8n }
+            - { name: DB_POSTGRESDB_USER, value: n8n }
+            - name: DB_POSTGRESDB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: agentos-secrets, key: N8N_DB_PASSWORD }
+            - name: N8N_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef: { name: agentos-secrets, key: N8N_ENCRYPTION_KEY }
+            - { name: N8N_HOST, value: n8n.home.arpa }
+            - { name: N8N_PROTOCOL, value: http }
+            - { name: WEBHOOK_URL, value: "http://n8n.home.arpa/" }
+            # LAN-only over plain HTTP for now; set to true once TLS is on the ingress.
+            - { name: N8N_SECURE_COOKIE, value: "false" }
+            - { name: N8N_DIAGNOSTICS_ENABLED, value: "false" }
+            - { name: N8N_RUNNERS_ENABLED, value: "true" }
+            - { name: GENERIC_TIMEZONE, value: America/New_York }
+            - { name: TZ, value: America/New_York }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 5678 }
+            periodSeconds: 15
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 100m, memory: 384Mi }
+            limits: { cpu: "1", memory: 1536Mi }
+          volumeMounts:
+            - name: data
+              mountPath: /home/node/.n8n
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: n8n-data
