@@ -9,11 +9,13 @@
   * { box-sizing:border-box }
   body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace }
   header { display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--panel) }
-  header h1 { font-size:16px; margin:0; color:var(--gold); letter-spacing:.5px }
+  header h1 { font-size:16px; margin:0; color:var(--gold); letter-spacing:.5px; transition:color .4s }
   header .stat b { color:var(--gold) }
   header a { color:var(--gold) }
   #paused { display:none; color:var(--bad); font-weight:bold }
   #conn { margin-left:auto; color:var(--muted); font-size:12px }
+  #season { color:var(--gold); font-weight:bold }
+  select { font:inherit; font-size:12px; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:3px 6px }
   main { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:16px; padding:16px; max-width:1400px; margin:0 auto }
   @media (max-width: 900px) { main { grid-template-columns:1fr } }
   #mapwrap { background:#07060a; border:1px solid var(--line); border-radius:8px; padding:8px }
@@ -34,11 +36,13 @@
 <body>
 <header>
   <h1>🏰 Agent Dungeon</h1>
+  <span id="season"></span>
   <span class="stat">Spend today <b id="spent">–</b></span>
   <span class="stat">Waiting on you <a id="pending" href="/">–</a></span>
   <span id="paused">⛔ FLEET PAUSED</span>
   <a href="/">← Mission Control</a>
   <span id="conn">connecting…</span>
+  <label class="stat">Theme <select id="theme"><option value="auto">Auto (season)</option></select></label>
 </header>
 <main>
   <div id="mapwrap"><canvas id="map" aria-label="Top-down dungeon map of the agent team"></canvas></div>
