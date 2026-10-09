@@ -8,16 +8,23 @@ import hmac
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import db, queue, roster as roster_mod, runner
+from .avatars import CATALOG, RECRUIT, ROOMS
 
 log = logging.getLogger(__name__)
 USER = os.environ.get("CONSOLE_USER", "admin")
 PASSWORD = os.environ["CONSOLE_PASSWORD"]
 PORT = int(os.environ.get("CONSOLE_PORT", "8080"))
+STATIC = Path(__file__).parent / "static"
+PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'"
+# The map is static HTML + JS; agent text reaches it only as JSON drawn on a canvas or set via textContent.
+OFFICE_CSP = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'"
 
 STYLE = """
 :root { --bg:#fff; --fg:#1d1d1f; --muted:#6b6b70; --line:#e3e3e6; --card:#f7f7f8; --accent:#2f6fde; --ok:#1f8a4c; --bad:#c23b3b; }
@@ -44,7 +51,8 @@ def post_button(action: str, label: str) -> str:
 
 
 class Handler(BaseHTTPRequestHandler):
-    roster = None
+    roster = None      # active phase only
+    roster_all = None  # every agent, so locked rooms can show what unlocks later
 
     def log_message(self, fmt, *args):
         log.info("%s %s", self.address_string(), fmt % args)
@@ -64,12 +72,13 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin") or self.headers.get("Referer")
         return not origin or urlparse(origin).netloc == self.headers.get("Host")
 
-    def _send(self, code: int, body: bytes, ctype: str = "text/html; charset=utf-8") -> None:
+    def _send(self, code: int, body: bytes, ctype: str = "text/html; charset=utf-8", csp: str = PAGE_CSP) -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", csp)
         self.end_headers()
         self.wfile.write(body)
 
@@ -96,8 +105,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, b"ok", "text/plain")
         if not self._guard():
             return
+        if path == "/office":
+            return self._send(200, (STATIC / "office.html").read_bytes(), csp=OFFICE_CSP)
+        if path == "/office.js":
+            return self._send(200, (STATIC / "office.js").read_bytes(), "text/javascript; charset=utf-8", OFFICE_CSP)
         parts = path.strip("/").split("/")
         with db.connect() as conn:
+            if path == "/api/office":
+                body = json.dumps(self.office_state(conn), default=str).encode()
+                return self._send(200, body, "application/json")
             if path == "/":
                 return self._send(200, self.dashboard(conn))
             if len(parts) == 2 and parts[0] == "outputs" and parts[1].isdigit():
@@ -140,6 +156,9 @@ class Handler(BaseHTTPRequestHandler):
         self._redirect()
 
     # --- views --------------------------------------------------------------
+    def office_state(self, conn) -> dict:
+        return office_state(conn, self.roster, self.roster_all)
+
     def dashboard(self, conn) -> bytes:
         r = queue.connect()
         paused = queue.is_paused(r)
@@ -185,7 +204,7 @@ class Handler(BaseHTTPRequestHandler):
         options = "".join(f"<option>{escape(a)}</option>" for a in self.roster.agents)
 
         return page("Mission Control", f"""
-<h1>Mission Control</h1>{switch}<div class=stats>{stats}</div>
+<h1>Mission Control</h1><p><a href='/office'>🏰 Open the dungeon map</a></p>{switch}<div class=stats>{stats}</div>
 <h2>Waiting on you</h2>{approvals}
 <h2>Run an agent</h2>
 <form method=post action=/run class=card><select name=agent>{options}</select>
@@ -220,8 +239,71 @@ class Handler(BaseHTTPRequestHandler):
 <h2>Outputs</h2><ul>{links}</ul><h2>Handoffs</h2><ul>{children}</ul>""")
 
 
+def office_state(conn, roster, roster_all) -> dict:
+    """Everything the dungeon map needs, in one poll."""
+    tasks = conn.execute(
+        "SELECT t.id, t.agent, t.status, t.source, left(t.input, 160) AS input, t.created_at, t.finished_at, "
+        "p.agent AS parent_agent FROM tasks t LEFT JOIN tasks p ON p.id = t.parent_id "
+        "WHERE t.created_at >= now() - interval '24 hours' ORDER BY t.id DESC LIMIT 300").fetchall()
+    pending = {r["agent"]: r["n"] for r in conn.execute(
+        "SELECT agent, count(*) AS n FROM approvals WHERE status = 'pending' GROUP BY agent")}
+    spend = {r["agent"]: float(r["usd"]) for r in conn.execute(
+        "SELECT agent, sum(cost_usd) AS usd FROM tasks WHERE created_at >= date_trunc('day', now()) GROUP BY agent")}
+    chosen = db.all_avatars(conn)
+    now = datetime.now(timezone.utc)
+
+    agents = []
+    for a in roster_all.agents.values():
+        mine = [t for t in tasks if t["agent"] == a.id]  # newest first
+        running = next((t for t in mine if t["status"] == "running"), None)
+        queued = next((t for t in mine if t["status"] == "queued"), None)
+        last = next((t for t in mine if t["finished_at"]), None)
+        if running:
+            state, task = "working", running["input"]
+        elif pending.get(a.id):
+            state, task = "needs_you", f"{pending[a.id]} approval(s) waiting on you"
+        elif queued:
+            state, task = "queued", queued["input"]
+        elif last and last["status"] == "failed" and now - last["finished_at"] < timedelta(minutes=30):
+            state, task = "failed", "Last task failed"
+        else:
+            state, task = "idle", ""
+        key = a.avatar or (chosen.get(a.id) or {}).get("avatar")
+        emoji, label = CATALOG.get(key, RECRUIT)
+        agents.append({
+            "id": a.id, "dept": a.dept, "phase": a.phase, "active": a.id in roster.agents,
+            "model": a.model, "emoji": emoji, "avatar": label,
+            "reason": (chosen.get(a.id) or {}).get("reason", ""),
+            "state": state, "task": task,
+            "spent": round(spend.get(a.id, 0.0), 3), "budget": a.budget_usd,
+        })
+
+    rooms = []
+    for dept, name, col, row in ROOMS:
+        members = [a for a in agents if a["dept"] == dept]
+        rooms.append({
+            "dept": dept, "name": name, "col": col, "row": row,
+            "active": any(a["active"] for a in members),
+            "unlocks": min((a["phase"] for a in members), default=None),
+        })
+
+    return {
+        "paused": queue.is_paused(queue.connect()),
+        "spent": round(db.spent_today(conn), 2),
+        "budget": runner.GLOBAL_DAILY_BUDGET_USD,
+        "pending": sum(pending.values()),
+        "rooms": rooms,
+        "agents": agents,
+        "events": [{
+            "id": t["id"], "agent": t["agent"], "status": t["status"], "source": t["source"],
+            "parent": t["parent_agent"], "input": (t["input"] or "")[:100], "at": t["created_at"],
+        } for t in tasks[:40]],
+    }
+
+
 def main() -> None:
     Handler.roster = roster_mod.load()
+    Handler.roster_all = roster_mod.load(phase=99)
     with db.connect() as conn:
         db.migrate(conn)
     log.info("console listening on :%d", PORT)

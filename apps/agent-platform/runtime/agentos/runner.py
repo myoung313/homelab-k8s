@@ -8,6 +8,7 @@ from datetime import date
 import anthropic
 
 from . import db, queue
+from .avatars import CATALOG
 from .roster import Agent, Model, Roster
 
 log = logging.getLogger(__name__)
@@ -105,6 +106,20 @@ CLIENT_TOOLS = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "choose_avatar",
+        "description": "Pick the avatar that represents you on the owner's dungeon map of the team. Choose once.",
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "avatar": {"type": "string", "enum": sorted(CATALOG)},
+                "reason": {"type": "string", "description": "One short sentence on why it fits your role."},
+            },
+            "required": ["avatar", "reason"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -154,6 +169,13 @@ class TaskContext:
 
         if name == "recent_activity":
             return json.dumps(db.recent_activity(self.conn, int(args["hours"])), default=str), False
+
+        if name == "choose_avatar":
+            if args["avatar"] not in CATALOG:
+                return f"Pick one of: {', '.join(sorted(CATALOG))}.", True
+            if not db.set_avatar(self.conn, self.agent.id, args["avatar"], args["reason"]):
+                return "You already have an avatar; only the owner can change it.", False
+            return f"You are now the {CATALOG[args['avatar']][1]}.", False
 
         return f"Unknown tool {name!r}.", True
 
@@ -215,10 +237,11 @@ def run(client: anthropic.Anthropic, conn, r, roster: Roster, task: dict) -> tup
     ctx = TaskContext(conn, r, roster, agent, task)
     system = [{"type": "text", "text": system_prompt(roster, agent), "cache_control": {"type": "ephemeral"}}]
     tools = CLIENT_TOOLS + (WEB_TOOLS if agent.web else [])
-    messages = [{
-        "role": "user",
-        "content": f"Task #{task['id']} (source: {task['source']}, date: {date.today().isoformat()})\n\n{task['input']}",
-    }]
+    content = f"Task #{task['id']} (source: {task['source']}, date: {date.today().isoformat()})\n\n{task['input']}"
+    if agent.avatar is None and db.get_avatar(conn, agent.id) is None:
+        content += ("\n\n(Housekeeping: you don't have an avatar yet on the owner's dungeon map of the team. "
+                    "Call choose_avatar once, picking whatever fits your role and personality.)")
+    messages = [{"role": "user", "content": content}]
 
     response = None
     for _ in range(agent.max_turns):

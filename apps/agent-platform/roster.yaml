@@ -12,6 +12,7 @@
 #   web        allow web search/fetch (sonnet/opus only)
 #   budget_usd hard daily cap for this agent; the fleet also has GLOBAL_DAILY_BUDGET_USD
 #   handoffs   teammates this agent may queue work for ("*" = anyone)
+#   avatar     optional: force this agent's avatar on the dungeon map (/office); otherwise it picks its own
 
 defaults:
   model: sonnet
