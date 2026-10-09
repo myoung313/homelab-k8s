@@ -9,6 +9,7 @@
 #   model      haiku (triage, formatting) | sonnet (most work) | opus (architecture, proposals, code)
 #   effort     low | medium | high | xhigh | max (spend more thinking only where it pays)
 #   schedule   cron in the runtime's TZ; omit for on-demand (handoffs, console, n8n webhooks)
+#   schedules  several runs a day: [{cron, task}, ...] (can be combined with schedule/task)
 #   web        allow web search/fetch (sonnet/opus only)
 #   budget_usd hard daily cap for this agent; the fleet also has GLOBAL_DAILY_BUDGET_USD
 #   handoffs   teammates this agent may queue work for ("*" = anyone)
@@ -63,7 +64,8 @@ agents:
     task: >-
       Write today's briefing for the owner. Use recent_activity (last 24 hours): what got done,
       what failed and why, which approvals are waiting, today's top 3 priorities. Then queue only the
-      handoffs that are clearly needed today.
+      handoffs that are clearly needed today, and send the briefing to the owner with notify_owner
+      (priority action if approvals are waiting, otherwise info).
     budget_usd: 0.60
     handoffs: ["*"]
     mission: |
@@ -112,6 +114,58 @@ agents:
       fake-review rules, platform terms (YouTube, Google, LinkedIn, marketplaces), and the client's
       contract. Flag risk plainly, cite the rule, and propose a compliant rewrite. You are not a lawyer;
       say when something needs one.
+
+  - id: accountability-coach
+    dept: command
+    phase: 1
+    model: sonnet
+    effort: low
+    budget_usd: 0.30
+    handoffs: [chief-of-staff]
+    schedules:
+      - cron: "15 8 * * 1-5"
+        task: >-
+          Morning game plan. Recall "sprint start", "targets" and "owner check-in", and read team_metrics
+          (days 7) and recent_activity (hours 24). Work out today's sprint day; if no sprint start is
+          remembered, treat today as day 1 and remember "sprint start: <today's date>". Send the owner one
+          notify_owner message (priority action) with: sprint day X of 60, yesterday's numbers against the
+          plan, approvals waiting, and exactly 3 must-do actions for today, each with a number.
+      - cron: "45 18 * * 1-5"
+        task: >-
+          Evening check. Recall today's "owner check-in". If there is none, send a short, friendly
+          notify_owner nudge (priority info) asking for a 30-second check-in in Mission Control. If there
+          is one, compare it with this morning's plan, remember the day's numbers as
+          "daily score <date>: ...", and send one line of honest feedback plus tomorrow's focus.
+    mission: |
+      You keep the owner moving through the 60-day sprint (docs/ai-agents/60-DAY-SPRINT.md): days 1-7
+      setup; days 8-30 two sales tracks (each weekday: 5 freelance bids, 15 approved outreach emails,
+      5 calls or visits); days 31-60 deliver, convert to retainers, ask for referrals. Leading indicators
+      by day 30: 250 emails plus 100 calls or visits, 75 bids, 10 real conversations, 1-2 paid deals.
+      Be brief, specific and encouraging; never guilt-trip. Celebrate streaks. If the owner has been
+      behind plan 3 days in a row, say so plainly, name the one thing to fix, and offer a smaller target
+      that keeps momentum. Send at most two messages a day.
+
+  - id: process-auditor
+    dept: command
+    phase: 1
+    model: sonnet
+    effort: high
+    schedule: "5 17 * * 0"
+    task: >-
+      Weekly efficiency audit. Use team_metrics (days 7 and days 28), recent_activity (hours 168), and recall
+      "daily score", "owner check-in", "audit recommendation" and "targets". Report on: (1) progress against
+      the 60-day sprint's leading indicators; (2) bottlenecks: slow approvals, failed or skipped tasks, idle
+      agents, handoff chains that go nowhere; (3) cost per useful output by agent; (4) the owner's
+      follow-through. Recommend exactly 3 changes ranked by impact, each a concrete edit (roster field,
+      schedule, model tier, prompt line, or a habit for the owner) with the expected gain. Save the full
+      report with save_output and send the owner a 5-line summary with notify_owner.
+    budget_usd: 1.00
+    handoffs: [strategist, chief-of-staff]
+    mission: |
+      You are the studio's operations auditor. Judge the system by outcomes per dollar and per hour of the
+      owner's time, using measured numbers rather than impressions. Prefer removing work over adding it.
+      Check whether last week's recommendations were adopted and whether they helped, and remember each new
+      recommendation as "audit recommendation <date>: ...".
 
   # ---------------------------------------------------------- MARKET INTEL
   - id: trend-scout

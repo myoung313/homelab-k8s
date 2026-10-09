@@ -36,6 +36,7 @@ class Agent:
     max_turns: int = 12
     handoffs: tuple[str, ...] = field(default_factory=tuple)
     avatar: str | None = None  # owner override; otherwise the agent picks its own
+    schedules: tuple[tuple[str, str], ...] = ()  # (cron, task) pairs, from schedule/task and schedules:
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,7 @@ def load(path: str = ROSTER_PATH, phase: int = ACTIVE_PHASE) -> Roster:
             max_turns=int(a.get("max_turns", defaults.get("max_turns", 12))),
             handoffs=tuple(a.get("handoffs", [])),
             avatar=a.get("avatar"),
+            schedules=_schedules(a),
         )
         if agent.id in agents:
             raise ValueError(f"duplicate agent id: {agent.id}")
@@ -86,6 +88,16 @@ def load(path: str = ROSTER_PATH, phase: int = ACTIVE_PHASE) -> Roster:
     return Roster(roster.house_rules, models, active)
 
 
+def _schedules(a: dict) -> tuple[tuple[str, str], ...]:
+    """An agent can run on one cron (schedule + task) and/or several (schedules: [{cron, task}])."""
+    out = []
+    if a.get("schedule"):
+        out.append((a["schedule"], (a.get("task") or "").strip()))
+    for s in a.get("schedules", []):
+        out.append((s["cron"], (s.get("task") or "").strip()))
+    return tuple(out)
+
+
 def _validate(roster: Roster) -> None:
     for agent in roster.agents.values():
         if agent.model not in roster.models:
@@ -96,11 +108,11 @@ def _validate(roster: Roster) -> None:
             raise ValueError(f"{agent.id}: unknown avatar {agent.avatar!r}")
         if agent.web and agent.model == "haiku":
             raise ValueError(f"{agent.id}: web tools need the sonnet or opus tier")
-        if agent.schedule:
-            if not croniter.is_valid(agent.schedule):
-                raise ValueError(f"{agent.id}: invalid cron {agent.schedule!r}")
-            if not agent.task:
-                raise ValueError(f"{agent.id}: scheduled agents need a default task")
+        for cron, task in agent.schedules:
+            if not croniter.is_valid(cron):
+                raise ValueError(f"{agent.id}: invalid cron {cron!r}")
+            if not task:
+                raise ValueError(f"{agent.id}: every schedule needs a task")
         for target in agent.handoffs:
             if target != "*" and target not in roster.agents:
                 raise ValueError(f"{agent.id}: unknown handoff target {target!r}")

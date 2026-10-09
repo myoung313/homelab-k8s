@@ -102,6 +102,39 @@ Then build these workflows in the n8n editor:
 Use the same HTTP pattern to feed `client-health` (daily metrics), `sre-watchdog` (alerts), and
 `freelance-bidder` (job posts).
 
+## Slack updates (recommended)
+
+Agents message you in one Slack channel. You get the chief-of-staff briefing, the accountability
+coach's morning plan and evening check, the weekly efficiency audit, ❗ alerts when approvals are
+waiting, and 💥 alerts when a task fails. Without Slack, the same messages appear in Mission Control
+under **Latest outputs**.
+
+1. Create a free workspace at [slack.com](https://slack.com), or use one you already have. Add a channel
+   such as `#agentos`.
+2. Go to [api.slack.com/apps](https://api.slack.com/apps), choose **Create New App**, then **From scratch**.
+   Name it "AgentOS" and pick your workspace.
+3. Open **Incoming Webhooks**, switch it on, click **Add New Webhook to Workspace**, and choose `#agentos`.
+   Copy the URL, which starts with `https://hooks.slack.com/services/...`. Treat it like a password,
+   because anyone who has it can post to the channel.
+4. On `k3s-cp01`, add the URL to `apps/agent-platform/secrets.yaml` as
+   `SLACK_WEBHOOK_URL: "https://hooks.slack.com/services/..."`, then apply it and restart:
+   ```bash
+   sudo kubectl apply -f apps/agent-platform/secrets.yaml
+   sudo kubectl -n agents rollout restart deploy/agentos-worker
+   ```
+5. Test it: in Mission Control, run `accountability-coach` with "Send me today's game plan."
+
+Each agent can send you at most 4 messages a day, so your phone won't get spammed. Approve and reject
+buttons inside Slack are a possible next step; they would use Slack's Socket Mode, so nothing in the
+homelab has to be exposed to the internet.
+
+## Daily check-in
+
+At the end of each workday, write one line in **Daily check-in** in Mission Control. For example:
+"approved 15 emails, 5 bids, 3 calls, 1 meeting booked". The accountability coach compares it with the
+morning plan, keeps your streak, and adjusts tomorrow's targets. The process auditor uses your
+check-ins in its weekly review.
+
 ## Operating it
 
 | I want to… | Do this |
