@@ -6,6 +6,8 @@ from dataclasses import dataclass, field, replace
 import yaml
 from croniter import croniter
 
+from .avatars import CATALOG
+
 ROSTER_PATH = os.environ.get("AGENTOS_ROSTER", "/etc/agentos/roster.yaml")
 # Agents whose phase is above this stay dormant: grow the team as revenue grows.
 ACTIVE_PHASE = int(os.environ.get("AGENTOS_PHASE", "1"))
@@ -33,6 +35,7 @@ class Agent:
     budget_usd: float = 1.0
     max_turns: int = 12
     handoffs: tuple[str, ...] = field(default_factory=tuple)
+    avatar: str | None = None  # owner override; otherwise the agent picks its own
 
 
 @dataclass(frozen=True)
@@ -67,6 +70,7 @@ def load(path: str = ROSTER_PATH, phase: int = ACTIVE_PHASE) -> Roster:
             budget_usd=float(a.get("budget_usd", defaults.get("budget_usd", 1.0))),
             max_turns=int(a.get("max_turns", defaults.get("max_turns", 12))),
             handoffs=tuple(a.get("handoffs", [])),
+            avatar=a.get("avatar"),
         )
         if agent.id in agents:
             raise ValueError(f"duplicate agent id: {agent.id}")
@@ -88,6 +92,8 @@ def _validate(roster: Roster) -> None:
             raise ValueError(f"{agent.id}: unknown model tier {agent.model!r}")
         if agent.effort not in ("low", "medium", "high", "xhigh", "max"):
             raise ValueError(f"{agent.id}: invalid effort {agent.effort!r}")
+        if agent.avatar is not None and agent.avatar not in CATALOG:
+            raise ValueError(f"{agent.id}: unknown avatar {agent.avatar!r}")
         if agent.web and agent.model == "haiku":
             raise ValueError(f"{agent.id}: web tools need the sonnet or opus tier")
         if agent.schedule:

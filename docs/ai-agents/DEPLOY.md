@@ -106,6 +106,8 @@ Use the same HTTP pattern to feed `client-health` (daily metrics), `sre-watchdog
 
 | I want to… | Do this |
 |---|---|
+| Watch the team work | `http://agents.home.arpa/office`: the dungeon map. Each department is a room, agents pick their own avatar on their first run, and you click any agent to see what it's doing. |
+| Choose an agent's avatar yourself | Add `avatar: dragon` (any name from `runtime/agentos/avatars.py`) to that agent in `roster.yaml` and re-apply |
 | Stop everything now | Mission Control → **Pause everything** |
 | Unlock the next group of agents | Set `AGENTOS_PHASE=2` in `apps/agent-platform/kustomization.yaml`, then `kubectl apply -k apps/agent-platform` |
 | Change an agent's prompt, model, budget, or schedule | Edit `apps/agent-platform/roster.yaml` and re-apply. The pods restart with the new roster automatically. |

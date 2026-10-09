@@ -56,6 +56,13 @@ CREATE TABLE IF NOT EXISTS memory (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS memory_tsv_idx ON memory USING GIN (tsv);
+
+CREATE TABLE IF NOT EXISTS avatars (
+    agent     TEXT PRIMARY KEY,
+    avatar    TEXT NOT NULL,
+    reason    TEXT NOT NULL DEFAULT '',
+    chosen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 
@@ -163,3 +170,21 @@ def recent_activity(conn, hours: int) -> dict:
             "SELECT agent, action, status, count(*) AS n FROM approvals "
             "WHERE created_at >= now() - %s::interval GROUP BY 1, 2, 3", window).fetchall(),
     }
+
+
+def get_avatar(conn, agent: str) -> str | None:
+    row = conn.execute("SELECT avatar FROM avatars WHERE agent = %s", (agent,)).fetchone()
+    return row["avatar"] if row else None
+
+
+def set_avatar(conn, agent: str, avatar: str, reason: str) -> bool:
+    """First choice wins; returns False if the agent already has one."""
+    return conn.execute(
+        "INSERT INTO avatars (agent, avatar, reason) VALUES (%s, %s, %s) "
+        "ON CONFLICT (agent) DO NOTHING RETURNING agent",
+        (agent, avatar, reason),
+    ).fetchone() is not None
+
+
+def all_avatars(conn) -> dict[str, dict]:
+    return {r["agent"]: r for r in conn.execute("SELECT agent, avatar, reason FROM avatars").fetchall()}
