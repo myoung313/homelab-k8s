@@ -188,3 +188,66 @@ def set_avatar(conn, agent: str, avatar: str, reason: str) -> bool:
 
 def all_avatars(conn) -> dict[str, dict]:
     return {r["agent"]: r for r in conn.execute("SELECT agent, avatar, reason FROM avatars").fetchall()}
+
+
+def approvals_for_task(conn, task_id: int) -> list[dict]:
+    return conn.execute(
+        "SELECT id, action, summary FROM approvals WHERE task_id = %s AND status = 'pending' ORDER BY id",
+        (task_id,)).fetchall()
+
+
+def notifications_today(conn, agent: str) -> int:
+    return conn.execute(
+        "SELECT count(*) AS n FROM outputs WHERE agent = %s AND kind = 'notification' "
+        "AND created_at >= date_trunc('day', now())", (agent,)).fetchone()["n"]
+
+
+CHECKIN_PREFIX = "owner check-in"
+
+
+def add_checkin(conn, text: str) -> None:
+    conn.execute(
+        "INSERT INTO memory (agent, note) VALUES ('owner', %s || ' ' || to_char(now(), 'YYYY-MM-DD') || ': ' || %s)",
+        (CHECKIN_PREFIX, text))
+
+
+def last_checkin(conn) -> dict | None:
+    return conn.execute(
+        "SELECT note, created_at FROM memory WHERE note LIKE %s ORDER BY id DESC LIMIT 1",
+        (CHECKIN_PREFIX + "%",)).fetchone()
+
+
+def team_metrics(conn, days: int) -> dict:
+    """Hard numbers for the coach and auditor: throughput, reliability, cost, and owner follow-through."""
+    days = max(1, min(days, 90))
+    window = (f"{days} days",)
+    return {
+        "window_days": days,
+        "agents": conn.execute(
+            "SELECT agent, count(*) AS tasks, "
+            "count(*) FILTER (WHERE status = 'done') AS done, "
+            "count(*) FILTER (WHERE status = 'failed') AS failed, "
+            "count(*) FILTER (WHERE status = 'skipped') AS skipped, "
+            "round(avg(extract(epoch FROM finished_at - started_at)))::int AS avg_seconds, "
+            "round(sum(cost_usd), 3)::float AS usd "
+            "FROM tasks WHERE created_at >= now() - %s::interval GROUP BY agent ORDER BY usd DESC", window).fetchall(),
+        "outputs_by_agent": {r["agent"]: r["n"] for r in conn.execute(
+            "SELECT agent, count(*) AS n FROM outputs WHERE kind <> 'notification' "
+            "AND created_at >= now() - %s::interval GROUP BY agent", window)},
+        "approvals": conn.execute(
+            "SELECT count(*) AS filed, "
+            "count(*) FILTER (WHERE status = 'approved') AS approved, "
+            "count(*) FILTER (WHERE status = 'rejected') AS rejected, "
+            "count(*) FILTER (WHERE status = 'pending') AS pending, "
+            "round((percentile_cont(.5) WITHIN GROUP (ORDER BY extract(epoch FROM decided_at - created_at) / 3600) "
+            "  FILTER (WHERE decided_at IS NOT NULL))::numeric, 1)::float AS median_hours_to_decide, "
+            "round((max(extract(epoch FROM now() - created_at) / 3600) FILTER (WHERE status = 'pending'))::numeric, 1)::float "
+            "  AS oldest_pending_hours "
+            "FROM approvals WHERE created_at >= now() - %s::interval", window).fetchone(),
+        "owner_checkins": conn.execute(
+            "SELECT count(*) AS count, max(created_at) AS last FROM memory "
+            "WHERE note LIKE %s AND created_at >= now() - %s::interval", (CHECKIN_PREFIX + "%", window[0])).fetchone(),
+        "total_usd": float(conn.execute(
+            "SELECT COALESCE(sum(cost_usd), 0) AS usd FROM tasks WHERE created_at >= now() - %s::interval",
+            window).fetchone()["usd"]),
+    }

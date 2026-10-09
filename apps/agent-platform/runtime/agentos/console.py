@@ -144,6 +144,10 @@ class Handler(BaseHTTPRequestHandler):
                 queue.set_paused(r, True)
             elif path == "/resume":
                 queue.set_paused(r, False)
+            elif path == "/checkin":
+                text = parse_qs(self._body().decode()).get("text", [""])[0].strip()
+                if text:
+                    db.add_checkin(conn, text[:1000])
             elif path == "/run":
                 form = parse_qs(self._body().decode())
                 agent, text = form.get("agent", [""])[0], form.get("input", [""])[0].strip()
@@ -202,10 +206,17 @@ class Handler(BaseHTTPRequestHandler):
             f"<td>${self.roster.agents[s['agent']].budget_usd:.2f}</td></tr>"
             for s in by_agent if s["agent"] in self.roster.agents)
         options = "".join(f"<option>{escape(a)}</option>" for a in self.roster.agents)
+        last = db.last_checkin(conn)
+        last_line = (f"Last check-in {last['created_at']:%b %d %H:%M}: {escape(last['note'].split(': ', 1)[-1][:160])}"
+                     if last else "No check-ins yet. Your accountability coach reads these.")
 
         return page("Mission Control", f"""
 <h1>Mission Control</h1><p><a href='/office'>🏰 Open the dungeon map</a></p>{switch}<div class=stats>{stats}</div>
 <h2>Waiting on you</h2>{approvals}
+<h2>Daily check-in</h2>
+<form method=post action=/checkin class=card><p>{last_line}</p>
+<textarea name=text rows=2 placeholder="What did you get done today? e.g. approved 12 emails, sent 5 bids, 2 calls, booked 1 meeting"></textarea>
+<p><button>Check in</button></p></form>
 <h2>Run an agent</h2>
 <form method=post action=/run class=card><select name=agent>{options}</select>
 <p><textarea name=input rows=3 placeholder="What should it do?"></textarea></p><button>Queue task</button></form>

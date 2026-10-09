@@ -118,7 +118,7 @@ You are the **CEO**. You approve, sell, and own relationships. The agents do eve
 
 Agents unlock in **phases** so you don't pay for a delivery team before you have a client:
 
-- **Phase 1 (week 1): 15 agents.** Research, pipeline, outreach, freelance bids, proposals, content planning.
+- **Phase 1 (week 1): 17 agents.** Research, pipeline, outreach, freelance bids, proposals, content planning.
 - **Phase 2 (first paying client): +19.** Delivery, client success, finance, ops.
 - **Phase 3 (month 4+): +6.** Products, SEO, competitive intel, cost tuning.
 
@@ -130,6 +130,8 @@ Change phases with one setting (`AGENTOS_PHASE` in `apps/agent-platform/kustomiz
 | 2 | `strategist` | Command | 1 | opus | Mon 06:35 | Weekly plan to $10k: what to double down on, what to kill |
 | 3 | `quality-reviewer` | Command | 1 | sonnet | on demand | Checks every draft before it reaches your approval queue |
 | 4 | `compliance-officer` | Command | 1 | sonnet | on demand | CAN-SPAM, FTC, and platform rules check on outreach and content |
+| 4a | `accountability-coach` | Command | 1 | sonnet | weekdays 08:15 and 18:45 | Keeps you on the 60-day sprint: morning plan, evening check, streaks (via Slack) |
+| 4b | `process-auditor` | Command | 1 | sonnet | Sun 17:05 | Weekly efficiency audit: bottlenecks, cost per output, top 3 fixes |
 | 5 | `trend-scout` | Market intel | 1 | sonnet + web | weekdays 06:10 | Daily 7-bullet brief: tools, pricing, and policy changes that matter |
 | 6 | `niche-researcher` | Market intel | 1 | sonnet + web | Tue 06:20 | Picks and deep-dives the target niche: pains, prices, objections |
 | 7 | `competitor-watch` | Market intel | 3 | sonnet + web | Thu 06:20 | Competitor offers and pricing, plus ways to differentiate |

@@ -7,7 +7,7 @@ from datetime import date
 
 import anthropic
 
-from . import db, queue
+from . import db, notify, queue
 from .avatars import CATALOG
 from .roster import Agent, Model, Roster
 
@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 MAX_HANDOFF_DEPTH = 3
 MAX_HANDOFFS_PER_TASK = 5
+MAX_NOTIFICATIONS_PER_DAY = 4  # per agent, so nobody spams the owner's phone
 GLOBAL_DAILY_BUDGET_USD = float(os.environ.get("GLOBAL_DAILY_BUDGET_USD", "15"))
 WEB_SEARCH_USD = 0.01  # per search request
 
@@ -107,6 +108,37 @@ CLIENT_TOOLS = [
         },
     },
     {
+        "name": "notify_owner",
+        "description": (
+            "Message the owner directly (Slack when configured, always visible in Mission Control). Use only for "
+            "what they must see today: a plan, a blocker, a decision, or a result. Keep it short and specific."
+        ),
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string", "description": "Plain text, under 1,200 characters. Lead with the point."},
+                "priority": {"type": "string", "enum": ["info", "action", "urgent"]},
+            },
+            "required": ["message", "priority"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "team_metrics",
+        "description": (
+            "Measured numbers for a look-back window: per-agent tasks, success/failure, average run time and cost, "
+            "outputs, approval volume and turnaround, and how often the owner checked in."
+        ),
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {"days": {"type": "integer", "description": "Look-back window, 1-90."}},
+            "required": ["days"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "choose_avatar",
         "description": "Pick the avatar that represents you on the owner's dungeon map of the team. Choose once.",
         "strict": True,
@@ -169,6 +201,19 @@ class TaskContext:
 
         if name == "recent_activity":
             return json.dumps(db.recent_activity(self.conn, int(args["hours"])), default=str), False
+
+        if name == "notify_owner":
+            if db.notifications_today(self.conn, self.agent.id) >= MAX_NOTIFICATIONS_PER_DAY:
+                return "Daily notification limit reached; put this in save_output instead.", True
+            message, priority = args["message"][:1200], args["priority"]
+            db.save_output(self.conn, self.task["id"], self.agent.id, "notification",
+                           f"[{priority}] {message[:70]}", message)
+            if notify.owner(self.agent.id, message, priority):
+                return "Sent to the owner on Slack.", False
+            return "Slack isn't configured; the message is in Mission Control under Latest outputs.", False
+
+        if name == "team_metrics":
+            return json.dumps(db.team_metrics(self.conn, int(args["days"])), default=str), False
 
         if name == "choose_avatar":
             if args["avatar"] not in CATALOG:

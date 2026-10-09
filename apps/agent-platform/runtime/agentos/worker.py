@@ -7,7 +7,7 @@ import time
 
 import anthropic
 
-from . import db, queue, roster as roster_mod, runner
+from . import db, notify, queue, roster as roster_mod, runner
 
 log = logging.getLogger(__name__)
 CONCURRENCY = int(os.environ.get("WORKER_CONCURRENCY", "4"))
@@ -46,6 +46,10 @@ def _loop(n: int, roster) -> None:
             log.exception("task #%d crashed", task_id)
             status, result = "failed", f"Crashed: {e!r}"
         db.finish_task(conn, task_id, status, result)
+        try:
+            notify.task_finished(conn, task, status, result)
+        except Exception:  # a Slack hiccup must never take down the worker
+            log.exception("notification for task #%d failed", task_id)
         log.info("task #%d %s", task_id, status)
 
 

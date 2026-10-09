@@ -29,7 +29,7 @@ def main() -> None:
         active = [a for a in roster.agents.values() if a.phase <= ACTIVE_PHASE]
         print(f"roster ok: {len(roster.agents)} agents, by phase {dict(sorted(phases.items()))}")
         print(f"AGENTOS_PHASE={ACTIVE_PHASE}: {len(active)} active, "
-              f"{sum(1 for a in active if a.schedule)} scheduled, "
+              f"{sum(1 for a in active if a.schedules)} scheduled, "
               f"max daily spend ${sum(a.budget_usd for a in active):.2f}")
     elif cmd == "run" and len(sys.argv) == 4:
         from . import db, queue

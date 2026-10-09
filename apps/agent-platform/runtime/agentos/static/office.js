@@ -7,9 +7,11 @@ const W = (M * 2 + COLS * RW + (COLS - 1) * GAP) * T;
 const H = (M * 2 + ROWS * RH + (ROWS - 1) * GAP) * T;
 const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 const TEXT_FONT = 'system-ui,"Segoe UI",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji"';
-const STATIONS = {
-  intel: '🔮', sales: '💰', content: '🎻', delivery: '⚒️', command: '🗺️',
-  success: '❤️‍🩹', products: '⚗️', finance: '🪙', platform: '🛡️',
+// Each agent gets a desk; what sits on it depends on what the department does.
+const DESK_PROPS = {
+  command: ['💻', '🗺️'], intel: ['🔮', '💻'], sales: ['☎️', '💻'], content: ['🖋️', '🎙️'],
+  delivery: ['⚒️', '💻'], success: ['🧪', '💻'], products: ['⚗️', '💻'], finance: ['🧮', '💻'],
+  platform: ['🖥️', '💻'],
 };
 const HUES = { intel: 260, sales: 40, content: 320, delivery: 15, command: 48, success: 140, products: 190, finance: 55, platform: 210 };
 const BASE_EMOTES = ['💭', '☕', '🎵', '😴', '📖', '🤔'];
@@ -112,19 +114,30 @@ let hovered = null;
 let seen = null;         // task id -> status, null until the first poll
 let background = null;
 let nextChat = 4, nextFirework = 1;
+let layoutKey = '';
 
 // ---------------------------------------------------------------- geometry
 function rect(col, row) {
   const x = (M + col * (RW + GAP)) * T, y = (M + row * (RH + GAP)) * T;
   return { x, y, w: RW * T, h: RH * T };
 }
-function station(room) { return { x: room.x + room.w / 2, y: room.y + 2.6 * T }; }
+function deskSpot(room, index, count) {
+  // Desks fill the upper part of the room: one row up to 4 agents, two rows beyond that.
+  const perRow = count <= 4 ? count : Math.ceil(count / 2);
+  const row = Math.floor(index / perRow), col = index % perRow;
+  const inRow = row === 0 ? perRow : count - perRow;
+  const x0 = room.x + 2.2 * T, x1 = room.x + room.w - 2.2 * T;
+  const x = inRow === 1 ? (x0 + x1) / 2 : x0 + (x1 - x0) * col / (inRow - 1);
+  const y = room.y + (row === 0 ? 2.5 : 4.3) * T;
+  const props = DESK_PROPS[room.dept] || ['💻'];
+  return { x, y, prop: props[index % props.length], seatX: x, seatY: y + .85 * T, room };
+}
 function homeSlot(room, index, count) {
-  // A grid of personal spots below the station, so a crowded room doesn't pile up.
+  // Idle agents hang out in a lounge below the desks, each with a personal spot.
   const cols = Math.min(4, count), rows = Math.ceil(count / 4);
   const col = index % 4, row = Math.floor(index / 4);
   const x0 = room.x + 2 * T, x1 = room.x + room.w - 2 * T;
-  const y0 = room.y + 4.6 * T, y1 = room.y + room.h - 1.4 * T;
+  const y0 = room.y + (count > 4 ? 6.1 : 4.9) * T, y1 = room.y + room.h - 1.3 * T;
   return {
     x: cols === 1 ? (x0 + x1) / 2 : x0 + (x1 - x0) * col / (cols - 1),
     y: rows === 1 ? (y0 + y1) / 2 : y0 + (y1 - y0) * row / (rows - 1),
@@ -246,13 +259,7 @@ function buildBackground() {
   }
   g.textAlign = 'center'; g.textBaseline = 'middle';
   for (const room of rooms) {
-    const s = station(room);
-    g.fillStyle = '#5b3a21';
-    g.fillRect(s.x - 1.6 * T, s.y - 6, 3.2 * T, 12);
-    g.fillStyle = '#7a5130';
-    g.fillRect(s.x - 1.6 * T, s.y - 6, 3.2 * T, 3);
-    g.font = `12px ${EMOJI_FONT}`;
-    g.fillText(STATIONS[room.dept] || '⭐', s.x, s.y - 1);
+    for (const d of room.desks || []) drawDesk(g, d);
     // seasonal decorations in the corners, away from the agents' spots
     g.font = `10px ${EMOJI_FONT}`;
     g.fillText(pick(theme.decorTop), room.x + T * .9, room.y + T * 2.1);
@@ -270,6 +277,26 @@ function buildBackground() {
   background = off;
 }
 
+function drawDesk(g, d) {
+  const forge = d.prop === '⚒️', cauldron = d.prop === '⚗️', rack = d.prop === '🖥️';
+  if (forge) {            // stone hearth instead of a wooden desk
+    g.fillStyle = '#3b3640'; g.fillRect(d.x - 12, d.y - 5, 24, 11);
+    g.fillStyle = '#ff7a2f'; g.fillRect(d.x - 9, d.y + 3, 18, 2);
+  } else if (cauldron) {  // iron cauldron on a fire pit
+    g.fillStyle = '#2b2b31'; g.beginPath(); g.ellipse(d.x, d.y + 1, 11, 6, 0, 0, Math.PI * 2); g.fill();
+  } else if (rack) {      // server rack
+    g.fillStyle = '#1c1f26'; g.fillRect(d.x - 8, d.y - 9, 16, 16);
+    g.strokeStyle = '#3a404d'; g.strokeRect(d.x - 7.5, d.y - 8.5, 15, 15);
+  } else {                // wooden desk with a chair
+    g.fillStyle = '#5b3a21'; g.fillRect(d.x - 13, d.y - 5, 26, 10);
+    g.fillStyle = '#7a5130'; g.fillRect(d.x - 13, d.y - 5, 26, 3);
+    g.fillStyle = '#3c2a1c'; g.fillRect(d.x - 4, d.y + 8, 8, 5);
+  }
+  g.font = `11px ${EMOJI_FONT}`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  if (!rack) g.fillText(d.prop, d.x, d.y - 2);
+}
+
 // ---------------------------------------------------------------- state sync
 function applyState(s) {
   document.getElementById('spent').textContent = `$${s.spent.toFixed(2)} / $${s.budget}`;
@@ -279,7 +306,6 @@ function applyState(s) {
 
   if (!rooms.length) {
     rooms = s.rooms.map(r => ({ ...r, ...rect(r.col, r.row) }));
-    buildBackground();
   } else {
     for (const r of rooms) Object.assign(r, s.rooms.find(n => n.dept === r.dept) || {});
   }
@@ -289,15 +315,27 @@ function applyState(s) {
   for (const a of active) {
     const room = roomOf(a.dept);
     const mates = active.filter(o => o.dept === a.dept).map(o => o.id).sort();
-    const home = homeSlot(room, mates.indexOf(a.id), mates.length);
+    const index = mates.indexOf(a.id);
+    const home = homeSlot(room, index, mates.length);
+    const desk = deskSpot(room, index, mates.length);
     live.add(a.id);
     let sp = sprites.get(a.id);
     if (!sp) {
       sp = { x: home.x, y: home.y, tx: home.x, ty: home.y, wait: Math.random() * 3, phase: Math.random() * 6,
-        jump: 0, shake: 0, dust: 0, spark: 0, emote: null, nextEmote: rand(6, 20) };
+        jump: 0, shake: 0, dust: 0, spark: 0, swing: 0, emote: null, nextEmote: rand(6, 20) };
       sprites.set(a.id, sp);
     }
-    Object.assign(sp, { agent: a, room, home });
+    Object.assign(sp, { agent: a, room, home, desk });
+  }
+  // furniture changes when agents are unlocked, so rebuild the map only then
+  const key = rooms.map(r => `${r.dept}:${active.filter(a => a.dept === r.dept).length}`).join(',');
+  if (key !== layoutKey) {
+    layoutKey = key;
+    for (const r of rooms) {
+      const ids = active.filter(a => a.dept === r.dept).map(a => a.id).sort();
+      r.desks = ids.map((_, i) => deskSpot(r, i, ids.length));
+    }
+    buildBackground();
   }
   for (const id of [...sprites.keys()]) if (!live.has(id)) sprites.delete(id);
   assignStations();
@@ -336,18 +374,10 @@ function applyState(s) {
 }
 
 function assignStations() {
-  // Working agents line up in front of their room's station.
-  const byRoom = new Map();
+  // Working agents go sit at their own desk.
   for (const sp of sprites.values()) {
-    if (sp.agent.state !== 'working') continue;
-    if (!byRoom.has(sp.room.dept)) byRoom.set(sp.room.dept, []);
-    byRoom.get(sp.room.dept).push(sp);
+    if (sp.agent.state === 'working') { sp.tx = sp.desk.seatX; sp.ty = sp.desk.seatY; }
   }
-  for (const list of byRoom.values()) list.forEach((sp, i) => {
-    const s = station(sp.room);
-    sp.tx = s.x + (i - (list.length - 1) / 2) * 1.4 * T;
-    sp.ty = s.y + 1.4 * T;
-  });
 }
 
 function log(text) {
@@ -404,15 +434,8 @@ function update(dt) {
         }
       }
     }
-    if (working && !sp.moving) {
-      sp.spark -= dt;
-      if (sp.spark <= 0) {
-        sp.spark = rand(.12, .3);
-        const s = station(sp.room);
-        emit({ x: s.x + rand(-8, 8), y: s.y - 2, vx: rand(-14, 14), vy: -rand(20, 40), g: 60, life: rand(.4, .8),
-          color: `hsl(${HUES[sp.room.dept] ?? 40} 95% 65%)`, size: rand(.7, 1.4), glow: true });
-      }
-    }
+    if (working && !sp.moving) workEffects(sp, dt);
+    sp.swing = Math.max(0, sp.swing - dt * 3);
     if (a.state === 'idle' && !sp.moving) {
       sp.nextEmote -= dt;
       if (sp.nextEmote <= 0) {
@@ -423,7 +446,7 @@ function update(dt) {
     if (sp.emote) { sp.emote.t -= dt; if (sp.emote.t <= 0) sp.emote = null; }
     sp.jump = Math.max(0, sp.jump - dt * 1.4);
     sp.shake = Math.max(0, sp.shake - dt);
-    sp.phase += dt * (sp.moving ? 12 : 2);
+    sp.phase += dt * (sp.moving ? 12 : working ? 16 : 2);
   }
 
   // two idle teammates standing close strike up a chat
@@ -458,6 +481,61 @@ function update(dt) {
       c.y += Math.sin(c.phase * 3) * 18 * dt;
     }
     if (c.x < -20 || c.x > W + 20) { Object.assign(c, newCreature(c)); c.x = c.dir > 0 ? -16 : W + 16; }
+  }
+}
+
+// What "busy" looks like at each kind of desk.
+function workEffects(sp, dt) {
+  const d = sp.desk;
+  sp.spark -= dt;
+  if (sp.spark > 0) return;
+  const hue = HUES[sp.room.dept] ?? 40;
+  switch (d.prop) {
+    case '💻': case '🖥️':   // code drifting up off the screen
+      sp.spark = rand(.25, .5);
+      emit({ x: d.x + rand(-5, 5), y: d.y - 8, vy: -rand(10, 18), life: 1, text: pick(['0', '1', '{', '}', '<>', ';']), color: '#7cff9b', size: 5 });
+      break;
+    case '⚒️':              // hammer strike: sparks fly
+      sp.spark = .5; sp.swing = 1;
+      for (let i = 0; i < 7; i++) emit({ x: d.x + rand(-3, 3), y: d.y - 4, vx: rand(-35, 35), vy: -rand(15, 45), g: 110, life: rand(.3, .6), color: '#ffb347', size: rand(.6, 1.2), glow: true });
+      break;
+    case '🔮': {            // swirling magic
+      sp.spark = .1;
+      const a = rand(0, Math.PI * 2);
+      emit({ x: d.x + Math.cos(a) * 7, y: d.y - 2 + Math.sin(a) * 4, vx: -Math.sin(a) * 12, vy: Math.cos(a) * 6 - 6, life: .8, color: '#c792ff', size: rand(.6, 1.1), glow: true });
+      break;
+    }
+    case '⚗️':              // bubbling brew
+      sp.spark = rand(.15, .3);
+      emit({ x: d.x + rand(-6, 6), y: d.y - 4, vx: rand(-3, 3), vy: -rand(12, 22), life: rand(.6, 1), color: pick(['#7dff9b', '#b0ffcf', '#c792ff']), size: rand(.8, 1.8), glow: true });
+      break;
+    case '🖋️':              // finished pages float off the desk
+      sp.spark = rand(.9, 1.4);
+      emit({ x: d.x + 6, y: d.y - 4, vx: rand(4, 10), vy: -rand(8, 14), life: 1.3, emoji: '📄', size: 6 });
+      break;
+    case '🎙️':              // recording
+      sp.spark = rand(.5, .8);
+      emit({ x: d.x + rand(-4, 4), y: d.y - 8, vx: rand(-6, 6), vy: -rand(12, 18), life: 1.2, emoji: pick(['🎵', '🎶']), size: 6 });
+      break;
+    case '☎️':              // on a call
+      sp.spark = rand(1.2, 2);
+      emit({ x: sp.x + 6, y: sp.y - 12, vx: rand(2, 6), vy: -10, life: 1.1, emoji: '💬', size: 6 });
+      break;
+    case '🧮':              // counting coins
+      sp.spark = rand(.4, .7);
+      emit({ x: d.x + rand(-6, 6), y: d.y - 3, vx: rand(-10, 10), vy: -rand(25, 35), g: 90, life: .7, emoji: '🪙', size: 5 });
+      break;
+    case '🧪':              // healing
+      sp.spark = rand(.5, .8);
+      emit({ x: d.x + rand(-6, 6), y: d.y - 6, vx: rand(-3, 3), vy: -rand(10, 16), life: 1.1, emoji: '💚', size: 5 });
+      break;
+    case '🗺️':              // planning glints on the map
+      sp.spark = rand(.3, .6);
+      emit({ x: d.x + rand(-9, 9), y: d.y + rand(-4, 3), life: .6, text: '✦', color: '#ffd166', size: 6 });
+      break;
+    default:
+      sp.spark = .3;
+      emit({ x: d.x, y: d.y - 4, vy: -20, life: .6, color: `hsl(${hue} 95% 65%)`, size: 1, glow: true });
   }
 }
 
@@ -543,16 +621,46 @@ function drawTorches(now) {
   }
 }
 
-function drawStationsGlow(now) {
-  for (const room of rooms) {
-    const busy = [...sprites.values()].some(sp => sp.room === room && sp.agent.state === 'working' && !sp.moving);
+function drawDesksLive(now) {
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const room of rooms) for (const d of room.desks || []) {
+    const sp = [...sprites.values()].find(s => s.desk && s.desk.x === d.x && s.desk.y === d.y && s.room === room);
+    const busy = sp && sp.agent.state === 'working' && !sp.moving;
+    if (d.prop === '🖥️') {
+      // server lights blink all the time, faster under load
+      for (let i = 0; i < 4; i++) for (const side of [-4, 3]) {
+        const on = Math.sin(now / (busy ? 70 : 400) + i * 2.1 + side) > 0;
+        glowDot(d.x + side, d.y - 6 + i * 3.6, .7, i % 2 ? '#5ab0ff' : '#7cff9b', on ? .95 : .2);
+      }
+    }
     if (!busy) continue;
-    const s = station(room), pulse = .5 + .25 * Math.sin(now / 200);
-    const grad = ctx.createRadialGradient(s.x, s.y, 2, s.x, s.y, 34);
-    grad.addColorStop(0, `hsla(${HUES[room.dept] ?? 40},95%,65%,${.35 * pulse})`);
-    grad.addColorStop(1, `hsla(${HUES[room.dept] ?? 40},95%,65%,0)`);
+    const hue = HUES[room.dept] ?? 40, pulse = .55 + .25 * Math.sin(now / 180);
+    const grad = ctx.createRadialGradient(d.x, d.y, 1, d.x, d.y, 22);
+    grad.addColorStop(0, `hsla(${hue},95%,65%,${.32 * pulse})`);
+    grad.addColorStop(1, `hsla(${hue},95%,65%,0)`);
     ctx.fillStyle = grad;
-    ctx.fillRect(s.x - 34, s.y - 34, 68, 68);
+    ctx.fillRect(d.x - 22, d.y - 22, 44, 44);
+    if (d.prop === '💻') {
+      // lit screen with scrolling code lines
+      ctx.fillStyle = `rgba(120,220,255,${.35 + .2 * Math.random()})`;
+      ctx.fillRect(d.x - 5, d.y - 8, 10, 5);
+      ctx.fillStyle = '#7cff9b';
+      for (let i = 0; i < 3; i++) ctx.fillRect(d.x - 4, d.y - 7.5 + ((now / 120 + i * 1.6) % 4.5), 2 + ((i * 7 + Math.floor(now / 300)) % 6), .6);
+    }
+  }
+}
+
+function drawTool(sp, x, y, now) {
+  // tools held while working at certain desks
+  const d = sp.desk;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (d.prop === '⚒️') {
+    ctx.save(); ctx.translate(x + 6, y - 2); ctx.rotate(-1.1 + Math.sin(sp.swing * Math.PI) * 1.6);
+    ctx.font = `8px ${EMOJI_FONT}`; ctx.fillText('🔨', 0, -5); ctx.restore();
+  } else if (d.prop === '🖋️') {
+    ctx.font = `7px ${EMOJI_FONT}`; ctx.fillText('🪶', d.x + Math.sin(now / 90) * 3, d.y - 6 + Math.cos(now / 70));
+  } else if (d.prop === '☎️') {
+    ctx.font = `7px ${EMOJI_FONT}`; ctx.fillText('📞', x + 6, y - 3 + Math.sin(now / 120) * .6);
   }
 }
 
@@ -596,7 +704,8 @@ function drawAgents(now) {
   const list = [...sprites.values()].sort((a, b) => a.y - b.y);
   for (const sp of list) {
     const a = sp.agent;
-    const bob = sp.moving ? Math.abs(Math.sin(sp.phase)) * 2 : Math.sin(sp.phase) * 0.6;
+    const atWork = a.state === 'working' && !sp.moving;
+    const bob = sp.moving ? Math.abs(Math.sin(sp.phase)) * 2 : atWork ? Math.abs(Math.sin(sp.phase)) * 1 : Math.sin(sp.phase) * 0.6;
     const hop = Math.sin(sp.jump * Math.PI) * 10 * (sp.jump > 0 ? 1 : 0);
     const shakeX = sp.shake > 0 ? Math.sin(now / 25) * 2.5 * sp.shake : 0;
     const x = sp.x + shakeX, y = sp.y - bob - hop;
@@ -615,6 +724,7 @@ function drawAgents(now) {
     ctx.font = `14px ${EMOJI_FONT}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(a.emoji, x, y);
+    if (atWork) drawTool(sp, x, y, now);
     if (hovered === a.id || selected === a.id) {
       ctx.font = `7px ${TEXT_FONT}`;
       ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(0,0,0,.9)'; ctx.fillStyle = '#f3e9d2';
@@ -623,7 +733,8 @@ function drawAgents(now) {
     }
 
     const top = y - 4;
-    if (a.state === 'working' && !sp.moving) bubble(x, top, '⚒ ' + a.task.slice(0, 26));
+    if (atWork && (hovered === a.id || selected === a.id)) bubble(x, top, '⚒ ' + a.task.slice(0, 40));
+    else if (atWork) { /* the desk animation shows the work; hover or click for the task */ }
     else if (a.state === 'needs_you') bubble(x, top - Math.abs(Math.sin(now / 250)) * 3, '❗');
     else if (a.state === 'queued') bubble(x, top, Math.sin(now / 500) > 0 ? '⏳' : '⌛');
     else if (a.state === 'failed') bubble(x, top, '💥');
@@ -658,7 +769,7 @@ function draw(now) {
   ctx.clearRect(0, 0, W, H);
   if (background) ctx.drawImage(background, 0, 0, W, H);
   drawTorches(now);
-  drawStationsGlow(now);
+  drawDesksLive(now);
   drawAgents(now);
   for (const sc of scrolls) {
     const p = scrollPos(sc);
