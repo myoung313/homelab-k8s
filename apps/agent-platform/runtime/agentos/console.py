@@ -38,16 +38,36 @@ th { color:var(--muted); font-weight:500 } .wrap { overflow-x:auto } .card { bac
 button { font:inherit; padding:5px 12px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); cursor:pointer }
 .ok { color:var(--ok) } .bad { color:var(--bad) } select,textarea { font:inherit; width:100%; padding:6px; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px }
 form.inline { display:inline }
+nav.top { display:flex; flex-wrap:wrap; gap:6px 16px; padding-bottom:10px; border-bottom:1px solid var(--line); margin-bottom:12px; font-weight:500 }
+h2 { scroll-margin-top:12px }
+button.go { background:var(--ok); border-color:var(--ok); color:#fff } button.no { color:var(--bad); border-color:var(--bad) }
+.actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center }
+@media (max-width: 640px) {
+  body { font-size:16px } main { padding:12px }
+  h1 { font-size:22px }
+  button { min-height:46px; padding:10px 18px; font-size:16px }
+  .actions form.inline { flex:1 1 40% } .actions button { width:100% }
+  .stat { flex:1 1 calc(50% - 6px); min-width:0 }
+  td, th { padding:8px 6px }
+  textarea, select { font-size:16px }   /* 16px stops iOS zooming into the field */
+}
 """
 
 
+NAV = "<nav class=top><a href='/'>🧭 Mission Control</a><a href='/office'>🏰 Dungeon</a><a href='/#approvals'>❗ Approvals</a></nav>"
+
+
 def page(title: str, body: str) -> bytes:
-    return (f"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-            f"<title>{escape(title)}</title><style>{STYLE}</style></head><body><main>{body}</main></body></html>").encode()
+    return (f"<!doctype html><html><head><meta charset=utf-8>"
+            f"<meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>"
+            f"<meta name=theme-color content='#151517'><meta name=apple-mobile-web-app-capable content=yes>"
+            f"<meta name=apple-mobile-web-app-title content='AgentOS'>"
+            f"<title>{escape(title)}</title><style>{STYLE}</style></head><body><main>{NAV}{body}</main></body></html>").encode()
 
 
-def post_button(action: str, label: str) -> str:
-    return f"<form class=inline method=post action='{escape(action)}'><button>{escape(label)}</button></form>"
+def post_button(action: str, label: str, cls: str = "") -> str:
+    c = f" class='{cls}'" if cls else ""
+    return f"<form class=inline method=post action='{escape(action)}'><button{c}>{escape(label)}</button></form>"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -189,9 +209,10 @@ class Handler(BaseHTTPRequestHandler):
 
         approvals = "".join(
             f"<div class=card><b>#{a['id']} · {escape(a['agent'])} → {escape(a['action'])}</b>"
-            f"<p>{escape(a['summary'])}</p><pre>{escape(json.dumps(a['payload'], indent=2))}</pre><p>"
-            f"{post_button(f'/approvals/{a['id']}/approve', 'Approve')} {post_button(f'/approvals/{a['id']}/reject', 'Reject')}"
-            f" · <a href='/tasks/{a['task_id']}'>task #{a['task_id']}</a></p></div>"
+            f"<p>{escape(a['summary'])}</p><pre>{escape(json.dumps(a['payload'], indent=2))}</pre>"
+            f"<p class=actions>{post_button(f'/approvals/{a['id']}/approve', '✅ Approve', 'go')} "
+            f"{post_button(f'/approvals/{a['id']}/reject', '✖ Reject', 'no')}</p>"
+            f"<p><a href='/tasks/{a['task_id']}'>task #{a['task_id']}</a></p></div>"
             for a in pending) or "<p>Nothing waiting on you.</p>"
 
         out_rows = "".join(
@@ -211,8 +232,8 @@ class Handler(BaseHTTPRequestHandler):
                      if last else "No check-ins yet. Your accountability coach reads these.")
 
         return page("Mission Control", f"""
-<h1>Mission Control</h1><p><a href='/office'>🏰 Open the dungeon map</a></p>{switch}<div class=stats>{stats}</div>
-<h2>Waiting on you</h2>{approvals}
+<h1>Mission Control</h1>{switch}<div class=stats>{stats}</div>
+<h2 id=approvals>Waiting on you</h2>{approvals}
 <h2>Daily check-in</h2>
 <form method=post action=/checkin class=card><p>{last_line}</p>
 <textarea name=text rows=2 placeholder="What did you get done today? e.g. approved 12 emails, sent 5 bids, 2 calls, booked 1 meeting"></textarea>
@@ -229,7 +250,7 @@ class Handler(BaseHTTPRequestHandler):
         o = conn.execute("SELECT * FROM outputs WHERE id = %s", (oid,)).fetchone()
         if not o:
             return 404, page("Not found", "<h1>Not found</h1>")
-        return 200, page(o["title"], f"<p><a href='/'>← Mission Control</a></p><h1>{escape(o['title'])}</h1>"
+        return 200, page(o["title"], f"<h1>{escape(o['title'])}</h1>"
                          f"<p>{escape(o['kind'])} · {escape(o['agent'])} · <a href='/tasks/{o['task_id']}'>task #{o['task_id']}</a></p>"
                          f"<div class=card><pre>{escape(o['body'])}</pre></div>")
 
@@ -243,7 +264,7 @@ class Handler(BaseHTTPRequestHandler):
         children = "".join(f"<li><a href='/tasks/{k['id']}'>#{k['id']}</a> {escape(k['agent'])} ({escape(k['status'])})</li>"
                            for k in kids) or "<li>none</li>"
         parent = f" · from <a href='/tasks/{t['parent_id']}'>#{t['parent_id']}</a>" if t["parent_id"] else ""
-        return 200, page(f"Task {tid}", f"""<p><a href='/'>← Mission Control</a></p>
+        return 200, page(f"Task {tid}", f"""
 <h1>Task #{tid}: {escape(t['agent'])}</h1><p>{escape(t['status'])} · {escape(t['source'])} · ${t['cost_usd']:.3f}{parent}</p>
 <h2>Input</h2><div class=card><pre>{escape(t['input'])}</pre></div>
 <h2>Result</h2><div class=card><pre>{escape(t['result'] or '')}</pre></div>

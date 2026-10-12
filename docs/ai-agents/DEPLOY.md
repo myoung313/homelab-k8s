@@ -128,6 +128,37 @@ Each agent can send you at most 4 messages a day, so your phone won't get spamme
 buttons inside Slack are a possible next step; they would use Slack's Socket Mode, so nothing in the
 homelab has to be exposed to the internet.
 
+Messages use Slack's Block Kit: a header with the agent and an icon, a formatted body, a footer with
+the priority and time, and a button that opens Mission Control (or the failed task). The button
+points at `CONSOLE_URL` in `apps/agent-platform/kustomization.yaml`; change it to your Tailscale
+address after you set up phone access below. Approve and reject buttons *inside* Slack would need a
+public endpoint or Slack's Socket Mode, so the button opens the approvals section instead.
+
+## Phone access (Tailscale)
+
+Mission Control only loads on your home network by default. Tailscale is a free private network app:
+your phone reaches the homelab over an encrypted tunnel, and nothing is opened on your router.
+
+1. On `k3s-cp01`:
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh
+   sudo tailscale up
+   ```
+   It prints a login link. Open it on any device and sign in (Google, Microsoft or GitHub).
+   Then run `tailscale ip -4` to get the address, which looks like `100.x.y.z`.
+2. In the [Tailscale admin console](https://login.tailscale.com/admin/machines), find `k3-cp01`, open its
+   menu, and choose **Disable key expiry**, so the connection doesn't drop after six months.
+3. On your phone, install **Tailscale** from the App Store or Google Play, sign in with the same account,
+   and turn it on. Keep it on; in the app you can enable connect-on-demand.
+4. In the phone's browser, open `http://100.x.y.z/` (or `http://k3-cp01/`). Log in as `admin`
+   with your console password, then use **Share → Add to Home Screen** for an app-style icon.
+   Test it once with Wi-Fi switched off.
+5. Make Slack's buttons use that address. In `apps/agent-platform/kustomization.yaml`, set
+   `CONSOLE_URL=http://100.x.y.z`, then run `sudo kubectl apply -k apps/agent-platform` on `k3s-cp01`.
+
+Don't forward ports on your router for this. The console uses a password over plain HTTP, which is
+fine inside the Tailscale tunnel (it's encrypted end to end) but not over the open internet.
+
 ## Daily check-in
 
 At the end of each workday, write one line in **Daily check-in** in Mission Control. For example:

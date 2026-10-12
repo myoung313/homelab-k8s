@@ -22,3 +22,5 @@ configMapGenerator:
       - WORKER_CONCURRENCY=4
       - TZ=America/New_York
       - LOG_LEVEL=INFO
+      # Where Slack buttons point. Change to your Tailscale address (see DEPLOY.md, Phone access).
+      - CONSOLE_URL=http://agents.home.arpa

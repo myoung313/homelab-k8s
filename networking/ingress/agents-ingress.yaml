@@ -28,3 +28,24 @@ spec:
                 name: n8n
                 port:
                   number: 80
+---
+# Fallback with no hostname, so the console also loads by IP address or any other name
+# (for example http://<this-node's-tailscale-name> from a phone). Traefik always prefers the
+# host-specific rules above when the Host header matches them, and the console still asks for a login.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agents-any-host
+  namespace: agents
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: agentos-console
+                port:
+                  number: 80
