@@ -4,7 +4,7 @@ metadata:
   name: whoami
   namespace: demo
 spec:
-  replicas: 3
+  replicas: 5
   strategy:
     type: RollingUpdate
     rollingUpdate:
