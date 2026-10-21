@@ -1,0 +1,97 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 92.9.0
+    helm:
+      valuesObject:
+        alertmanager:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        prometheusOperator:
+          nodeSelector:
+            node-role.kubernetes.io/worker: worker
+          resources:
+            requests: {cpu: 20m, memory: 50Mi}
+            limits: {memory: 200Mi}
+        kube-state-metrics:
+          nodeSelector:
+            node-role.kubernetes.io/worker: worker
+          resources:
+            requests: {cpu: 10m, memory: 30Mi}
+            limits: {memory: 100Mi}
+        prometheus:
+          prometheusSpec:
+            retention: 5d
+            nodeSelector:
+              node-role.kubernetes.io/worker: worker
+            resources:
+              requests: {cpu: 100m, memory: 400Mi}
+              limits: {memory: 1Gi}
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 4Gi
+        grafana:
+          nodeSelector:
+            node-role.kubernetes.io/worker: worker
+          resources:
+            requests: {cpu: 50m, memory: 150Mi}
+            limits: {memory: 400Mi}
+          admin:
+            existingSecret: grafana-admin
+            userKey: admin-user
+            passwordKey: admin-password
+          persistence:
+            enabled: true
+            size: 1Gi
+          grafana.ini:
+            server:
+              domain: grafana.lab.local
+              root_url: https://grafana.lab.local
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            annotations:
+              cert-manager.io/cluster-issuer: homelab-ca
+            hosts:
+            - grafana.lab.local
+            tls:
+            - secretName: grafana-tls
+              hosts:
+              - grafana.lab.local
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  ignoreDifferences:
+  - group: admissionregistration.k8s.io
+    kind: MutatingWebhookConfiguration
+    jqPathExpressions:
+    - .webhooks[]?.clientConfig.caBundle
+  - group: admissionregistration.k8s.io
+    kind: ValidatingWebhookConfiguration
+    jqPathExpressions:
+    - .webhooks[]?.clientConfig.caBundle
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - ServerSideApply=true
