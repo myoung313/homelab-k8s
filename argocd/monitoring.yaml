@@ -12,7 +12,7 @@ spec:
     helm:
       valuesObject:
         alertmanager:
-          enabled: true
+         enabled: true
           alertmanagerSpec:
             secrets:
             - alertmanager-slack
