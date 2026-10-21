@@ -11,8 +11,35 @@ spec:
     targetRevision: 92.9.0
     helm:
       valuesObject:
-        alertmanager:
-          enabled: false
+                alertmanager:
+          enabled: true
+          alertmanagerSpec:
+            secrets:
+            - alertmanager-slack
+            nodeSelector:
+              node-role.kubernetes.io/worker: worker
+            resources:
+              requests: {cpu: 10m, memory: 40Mi}
+              limits: {memory: 100Mi}
+          config:
+            global:
+              resolve_timeout: 5m
+            route:
+              receiver: slack
+              group_by: ['alertname', 'namespace']
+              group_wait: 30s
+              group_interval: 5m
+              repeat_interval: 4h
+              routes:
+              - receiver: "null"
+                matchers:
+                - alertname =~ "Watchdog|InfoInhibitor"
+            receivers:
+            - name: "null"
+            - name: slack
+              slack_configs:
+              - api_url_file: /etc/alertmanager/secrets/alertmanager-slack/url
+                send_resolved: true
         kubeEtcd:
           enabled: false
         kubeScheduler:
