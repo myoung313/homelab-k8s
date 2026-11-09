@@ -1,0 +1,25 @@
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: assetwatch
+  namespace: assetwatch
+  annotations:
+    cert-manager.io/cluster-issuer: homelab-ca
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - assetwatch.lab.local
+      secretName: assetwatch-tls
+  rules:
+    - host: assetwatch.lab.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: assetwatch
+                port:
+                  number: 80
