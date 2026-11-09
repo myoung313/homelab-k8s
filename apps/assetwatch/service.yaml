@@ -1,0 +1,17 @@
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: assetwatch
+  namespace: assetwatch
+  labels:
+    app: assetwatch
+spec:
+  type: ClusterIP
+  selector:
+    app: assetwatch
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000
