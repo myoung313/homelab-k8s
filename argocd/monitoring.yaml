@@ -31,9 +31,9 @@ spec:
               group_interval: 5m
               repeat_interval: 4h
               routes:
-              - receiver: "null"
-                matchers:
-                - alertname =~ "Watchdog|InfoInhibitor"
+                - receiver: "null"
+                  matchers:
+                    - alertname =~ "Watchdog|InfoInhibitor"
             receivers:
             - name: "null"
             - name: slack
